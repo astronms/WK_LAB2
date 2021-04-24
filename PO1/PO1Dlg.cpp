@@ -8,6 +8,10 @@
 #include "ParamsDlg.h"
 #include "afxdialogex.h"
 
+#include <vector>
+#include <algorithm>
+#include <math.h>
+
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -23,10 +27,10 @@ class CAboutDlg : public CDialogEx
 public:
 	CAboutDlg();
 
-// Dialog Data
+	// Dialog Data
 	enum { IDD = IDD_ABOUTBOX };
 
-	protected:
+protected:
 	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV support
 
 // Implementation
@@ -111,20 +115,32 @@ BOOL CPODlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// Set small icon
 
 	// TODO: Add extra initialization here
-	CRect rDlg(7,7,407,407);
+	CRect rDlg(7, 7, 407, 407);
 	MapDialogRect(rDlg);
 
 	m_imgWndIN.Create(rDlg, this, IMG_WND_ID_IN);
-		
+
 	rDlg = CRect(530, 7, 930, 407);
 	MapDialogRect(rDlg);
 
 	m_imgWndOUT.Create(rDlg, this, IMG_WND_ID_OUT);
-	
-	// OPCJE
-	m_combo1.AddString(L"convert to greyscale");
-	m_combo1.SelectString(0, L"convert to greyscale");
 
+	// OPCJE
+	m_combo1.AddString(L"conversion to greyscale");
+
+	//  Tutaj mo¿na dodaæ kolejne opcje:
+	//m_combo1.AddString(L"...");
+	m_combo1.AddString(L"usredniajacy");
+	m_combo1.AddString(L"Gaussa");
+	m_combo1.AddString(L"Sobela pion");
+	m_combo1.AddString(L"Sobela poziom");
+	m_combo1.AddString(L"laplasjan");
+	m_combo1.AddString(L"wyostrzajaca");
+	m_combo1.AddString(L"Filtr medianowy 3x3");
+	m_combo1.AddString(L"Filtr medianowy 5x5");
+	m_combo1.AddString(L"Filtr medianowy 5x5 krzy¿owa");
+	m_combo1.AddString(L"LoG");
+	m_combo1.SelectString(0, L"usredniajacy");
 
 
 	return TRUE;  // return TRUE  unless you set the focus to a control
@@ -152,7 +168,7 @@ void CPODlg::OnPaint()
 	if (IsIconic())
 	{
 		CPaintDC dc(this); // device context for painting
-		
+
 		SendMessage(WM_ICONERASEBKGND, reinterpret_cast<WPARAM>(dc.GetSafeHdc()), 0);
 
 		// Center icon in client rectangle
@@ -199,13 +215,13 @@ void CPODlg::OnBnClickedButtonLoad()
 		m_imgH = m_pImgIN->GetHeight();
 
 		m_pImgOUT = ::new Bitmap(m_imgW, m_imgH, PixelFormat32bppARGB);// PixelFormat16bppGrayScale);
-		
+
 		m_imgWndOUT.SetImg(m_pImgOUT);
-	
+
 		Invalidate();
 	}
 
-	
+
 }
 
 
@@ -215,55 +231,423 @@ void CPODlg::OnBnClickedButtonProcess()
 	m_combo1.GetLBText(m_combo1.GetCurSel(), sOption);
 	BeginWaitCursor();
 
-	if (sOption == L"convert to greyscale")
-	{
-		for (int x = 0; x < m_imgW; x++)
-			for (int y = 0; y < m_imgH; y++)
-			{
-				BYTE J = GetPixel(x, y);
-				SetPixel(x, y, J);
+
+	if (sOption == L"usredniajacy") {
+		int mask[3][3] = {
+			{1,1,1},
+			{1,1,1},
+			{1,1,1}
+		};
+
+		ApplyMask3(mask);
+	}
+	else if (sOption == L"Gaussa") {
+		int mask[3][3] = {
+			{1,4,1},
+			{4,12,4},
+			{1,4,1}
+		};
+
+		ApplyMask3(mask);
+	}
+	else if (sOption == L"Sobela pion") {
+		int mask[3][3] = {
+			{1,2,1},
+			{0,0,0},
+			{-1,-2,-1}
+		};
+
+		ApplyMask3(mask);
+	}
+	else if (sOption == L"Sobela poziom") {
+		int mask[3][3] = {
+			{-1,0,1},
+			{-2,0,2},
+			{-1,0,1}
+		};
+
+		ApplyMask3(mask);
+	}
+	else if (sOption == L"laplasjan") {
+		int mask[3][3] = {
+			{-2,1,-2},
+			{1,4,1},
+			{-2,1,-2}
+		};
+
+		ApplyMask3(mask);
+	}
+	else if (sOption == L"wyostrzajaca") {
+		int mask[3][3] = {
+			{0,-1,0},
+			{-1,5,-1},
+			{0,-1,0}
+		};
+
+		int wSum = 0;
+		bool hasNegative = false;
+		for (int i = 0; i < 3; i++) {
+			for (int j = 0; j < 3; j++) {
+				wSum += mask[i][j];
+				if (mask[i][j] < 0) {
+					hasNegative = true;
+				}
 			}
+		}
+
+		for (int x = 1; x < m_imgW - 1; x++) {
+			for (int y = 1; y < m_imgH - 1; y++)
+			{
+				int JsSum = 0;
+				for (int i = -1; i <= 1; i++) {
+					for (int j = -1; j <= 1; j++) {
+						BYTE Js = GetPixel(x - i, y - j);
+						JsSum += Js * mask[i + 1][j + 1];
+					}
+				}
+
+				int newJs;
+				if (hasNegative) {
+					newJs = JsSum;
+				}
+				else {
+					newJs = JsSum / wSum;
+				}
+
+				if (newJs < 0) newJs = 0;
+				if (newJs > 255) newJs = 255;
+				SetPixel(x, y, newJs);
+			}
+		}
+	}
+
+	if (sOption == L"Filtr medianowy 3x3")
+	{
+		int a = m_imgH;
+		int b = m_imgW;
+
+		BYTE** tempTab = new BYTE * [b];
+		for (int i = 0; i < b; ++i)
+		{
+			tempTab[i] = new BYTE[a];
+		}
+
+
+		for (int y = 0; y < m_imgH; y++)
+		{
+			for (int x = 0; x < m_imgW; x++)
+			{
+				tempTab[x][y] = GetPixel(x, y);
+			}
+		}
+
+		BYTE J[9] = {};
+		BYTE temp = {};
+
+		for (int y = 1; y < m_imgH - 1; y++) {
+			for (int x = 1; x < m_imgW - 1; x++) {
+				J[0] = GetPixel(x - 1, y - 1);
+				J[1] = GetPixel(x - 1, y);
+				J[2] = GetPixel(x - 1, y + 1);
+
+				J[3] = GetPixel(x, y - 1);
+				J[4] = GetPixel(x, y);
+				J[5] = GetPixel(x, y + 1);
+
+				J[6] = GetPixel(x + 1, y - 1);
+				J[7] = GetPixel(x + 1, y);
+				J[8] = GetPixel(x + 1, y + 1);
+
+				for (int i = 0; i < 8; i++)
+				{
+					for (int j = 0; j < 8; j++)
+					{
+						if (J[j] > J[j + 1])
+						{
+							temp = J[j];
+							J[j] = J[j + 1];
+							J[j + 1] = temp;
+						}
+					}
+				}
+				tempTab[x][y] = J[4];
+
+			}
+		}
+
+		for (int y = 0; y < m_imgH; y++)
+		{
+			for (int x = 0; x < m_imgW; x++)
+			{
+				SetPixel(x, y, tempTab[x][y]);
+			}
+		}
+
 
 	}
 
+	if (sOption == L"Filtr medianowy 5x5 krzy¿owa")
+	{
+		int a = m_imgH;
+		int b = m_imgW;
+
+		BYTE** tempTab = new BYTE * [b];
+		for (int i = 0; i < b; ++i)
+		{
+			tempTab[i] = new BYTE[a];
+		}
+
+		for (int y = 0; y < m_imgH; y++)
+		{
+			for (int x = 0; x < m_imgW; x++)
+			{
+				tempTab[x][y] = GetPixel(x, y);
+			}
+		}
+
+		BYTE J[25] = {};
+		BYTE temp = {};
+
+		for (int y = 2; y < m_imgH - 2; y++) {
+			for (int x = 2; x < m_imgW - 2; x++) {
+				J[0] = GetPixel(x - 1, y - 2);
+				J[1] = GetPixel(x - 1, y - 1);
+				J[2] = GetPixel(x - 1, y);
+				J[3] = GetPixel(x - 1, y + 1);
+				J[4] = GetPixel(x - 1, y + 2);
+
+				J[5] = GetPixel(x - 2, y - 2);
+				J[6] = GetPixel(x - 2, y - 1);
+				J[7] = GetPixel(x - 2, y);
+				J[8] = GetPixel(x - 2, y + 1);
+				J[9] = GetPixel(x - 2, y + 2);
+
+				J[10] = GetPixel(x, y - 2);
+				J[11] = GetPixel(x, y - 1);
+				J[12] = GetPixel(x, y);
+				J[13] = GetPixel(x, y + 1);
+				J[14] = GetPixel(x, y + 2);
+
+				J[15] = GetPixel(x + 1, y - 2);
+				J[16] = GetPixel(x + 1, y - 1);
+				J[17] = GetPixel(x + 1, y);
+				J[18] = GetPixel(x + 1, y);
+				J[19] = GetPixel(x + 1, y + 2);
+
+				J[20] = GetPixel(x + 2, y - 2);
+				J[21] = GetPixel(x + 2, y - 1);
+				J[22] = GetPixel(x + 2, y);
+				J[23] = GetPixel(x + 2, y + 1);
+				J[24] = GetPixel(x + 2, y + 2);
+
+				for (int i = 0; i < 24; i++)
+				{
+					for (int j = 0; j < 24; j++)
+					{
+						if (J[j] > J[j + 1])
+						{
+							temp = J[j];
+							J[j] = J[j + 1];
+							J[j + 1] = temp;
+						}
+					}
+				}
+				tempTab[x][y] = J[12];
+			}
+		}
+
+		for (int y = 0; y < m_imgH; y++)
+		{
+			for (int x = 0; x < m_imgW; x++)
+			{
+				SetPixel(x, y, tempTab[x][y]);
+			}
+		}
+	}
+
+	if (sOption == L"Filtr medianowy 5x5")
+	{
+		int a = m_imgH;
+		int b = m_imgW;
+
+		BYTE** tempTab = new BYTE * [b];
+		for (int i = 0; i < b; ++i)
+		{
+			tempTab[i] = new BYTE[a];
+		}
+
+		for (int y = 0; y < m_imgH; y++)
+		{
+			for (int x = 0; x < m_imgW; x++)
+			{
+				tempTab[x][y] = GetPixel(x, y);
+			}
+		}
+
+		BYTE J[5] = {};
+		BYTE temp = {};
+
+		for (int y = 1; y < m_imgH - 1; y++) {
+			for (int x = 1; x < m_imgW - 1; x++) {
+				J[0] = GetPixel(x - 1, y);
+				J[1] = GetPixel(x + 1, y);
+				J[2] = GetPixel(x, y + 1);
+				J[3] = GetPixel(x, y - 1);
+				J[4] = GetPixel(x, y);
+
+				for (int i = 0; i < 4; i++)
+				{
+					for (int j = 0; j < 4; j++)
+					{
+						if (J[j] > J[j + 1])
+						{
+							temp = J[j];
+							J[j] = J[j + 1];
+							J[j + 1] = temp;
+						}
+					}
+				}
+				tempTab[x][y] = J[2];
+			}
+		}
+
+		for (int y = 0; y < m_imgH; y++)
+		{
+			for (int x = 0; x < m_imgW; x++)
+			{
+				SetPixel(x, y, tempTab[x][y]);
+			}
+		}
+	}
+	else if (sOption == L"LoG") {
+		float sigma = 1.5f;
+
+
+		int maskSize = (1 + 2 * ceil(2.5f * sigma));
+		float** mask = new float* [maskSize];
+		int maskOffset = maskSize / 2;
+
+		for (int i = 0; i < maskSize; i++) {
+			mask[i] = new float[maskSize];
+		}
+		float sum = 0;
+		for (int i = 0; i < maskSize; i++) {
+			for (int j = 0; j < maskSize; j++) {
+				float a = (-1) * (i * i + j * j - (sigma * sigma)) / pow(sigma, 4);
+				float expPow = (-1) * ((i * i + j * j) / (2 * sigma * sigma));
+				float expo = exp(expPow);
+				mask[i][j] = a * expo;
+				sum += mask[i][j];
+			}
+		}
+		float b = sum;
+		sum = 0;
+		for (int i = 0; i < maskSize; i++) {
+			for (int j = 0; j < maskSize; j++) {
+				mask[i][j] /= mask[0][maskOffset] * (-1);
+				sum += mask[i][j];
+			}
+		}
+		b = sum;
+		int size = m_imgW * m_imgH;
+		int* intPixels = new int[size];
+
+
+		for (int x = 0; x < m_imgW; x++) {
+			for (int y = 0; y < m_imgH; y++) {
+
+				float licznik = 0;
+				for (int i = -maskOffset; i < maskOffset + 1; i++) {
+					for (int j = -maskOffset; j < maskOffset + 1; j++) {
+
+						int pixel;
+						if (x - i < 0 || x - i >= m_imgW || y - j < 0 || y - j >= m_imgH)
+							pixel = GetPixel(x, y);
+						else
+							pixel = GetPixel(x - i, y - j);
+						licznik += (mask[maskOffset - i][maskOffset - j] * pixel);
+					}
+				}
+				float newValue = licznik + 127;
+				if (newValue < 0) newValue = 0;
+				else newValue = 255;
+
+				intPixels[y * m_imgW + x] = newValue;
+			}
+		}
+		for (int x = 0; x < m_imgW; x++) {
+			for (int y = 0; y < m_imgH; y++) {
+				SetPixel(x, y, intPixels[y * m_imgW + x]);
+			}
+		}
+		delete[]intPixels;
+		for (int i = 0; i < maskSize; ++i)
+			delete mask[i];
+		delete[] mask;
+	}
+
+
 	/*********************************************************************************************************************************
 	TU NALE¯Y WSTAWIC OBS£UGÊ POZOSTA£YCH OPCJI
-	
+
 	Zmienne m_imgH i m_imgW zawieraj¹ informacje o wysokoœci i szerokoœci przetwarzanego obrazu.
 
-	Funkcja GetPixel(x,y) zwraca wartoœæ jasnoœci piksela o wspó³rzêdnych (x,y) w obrazie Ÿród³owym (w przypadku obrazów RGB nastêpuje 
+	Funkcja GetPixelXY(x,y) zwraca wartoœæ jasnoœci piksela o wspó³rzêdnych (x,y) w obrazie Ÿród³owym (w przypadku obrazów RGB nastêpuje
 	automatyczna konwersja na poziom szaroœci).
-	
-	Funkcja SetPixel(x,y,J) ustawia w obrazie wynikowym jasnoœæ piksela o wspó³rzêdnych (x,y) na wartoœæ J. 
+
+	Funkcja SetPixelXY(x,y,Js) ustawia w obrazie wynikowym jasnoœæ piksela o wspó³rzêdnych (x,y) na wartoœæ Js.
 
 	Wartoœci jasnoœci s¹ typu BYTE (0..255).
-	
-	Dodawanie opcji do listy rozwijanej zrealizowane jest na koñcu kodu metody OnInitDialog(). 
-	
+
+	Dodawanie opcji do listy rozwijanej zrealizowane jest na koñcu kodu metody OnInitDialog().
+
 	W metodzie OnBnClickedButtonParams() pobierany jest ³añcuch znaków wpisany przez u¿ytkownika w oknie pojawiaj¹cym siê po naciœniêciu
 	przycisku "Params".
-		
-	***********************************************************************************************************************************
-	TO DO: ADD THE IMPLEMENTATION OF OTHER IMAGE PROCESSING OPERATIONS HERE
 
-	Variables m_imgH and m_imgW store the information about the height and the width of the image which should be processed.
-
-	GetPixel(x,y) returns the intensity of the pixel located at (x,y) position within the source image (in the case of RGB images the 
-	conversion to grey level value is performed automatically).
-
-	SetPixel(x,y,J) sets the intensity of the pixel located at (x,y) position within the output image to J.
-	The intensity values are of type BYTE (0..255).
-
-	New options can be added to the drop-down list by using m_combo1.AddString() method (see the last lines of OnInitDialog() implementation). 
-	
-	OnBnClickedButtonParams() retrieves the string of parameters entered in the window that appears after clicking the "Params" button.  
-	
 	***********************************************************************************************************************************/
+
 
 	Invalidate();
 	EndWaitCursor();
 }
 
+void CPODlg::ApplyMask3(int mask[3][3]) {
+	int wSum = 0;
+	bool hasNegative = false;
+	for (int i = 0; i < 3; i++) {
+		for (int j = 0; j < 3; j++) {
+			wSum += mask[i][j];
+			if (mask[i][j] < 0) {
+				hasNegative = true;
+			}
+		}
+	}
+
+	for (int x = 1; x < m_imgW - 1; x++) {
+		for (int y = 1; y < m_imgH - 1; y++)
+		{
+			int JsSum = 0;
+			for (int i = -1; i <= 1; i++) {
+				for (int j = -1; j <= 1; j++) {
+					BYTE Js = GetPixel(x - i, y - j);
+					JsSum += Js * mask[i + 1][j + 1];
+				}
+			}
+
+			int newJs;
+			if (hasNegative) {
+				newJs = JsSum + 127;
+			}
+			else {
+				newJs = JsSum / wSum;
+			}
+
+			if (newJs < 0) newJs = 0;
+			if (newJs > 255) newJs = 255;
+			SetPixel(x, y, newJs);
+		}
+	}
+}
 
 void CPODlg::OnBnClickedButtonSave()
 {
@@ -288,16 +672,16 @@ void CPODlg::OnBnClickedButtonSave()
 			default:
 				sExt = "BMP";
 			}
-			
+
 			sPath += L"." + sExt;
 		}
-		
+
 		if (sExt == "BMP")
 			sClsId = "image/bmp";
 
 		if (sExt == "JPG")
 			sClsId = "image/jpeg";
-				
+
 		GetEncoderClsid(sClsId, &Clsid);
 		m_pImgOUT->Save(sPath, &Clsid, NULL);
 	}
@@ -308,10 +692,11 @@ void CPODlg::OnBnClickedButtonParams()
 {
 	CParamsDlg paramsDlg;
 	CString s;
-	
+
 	if (paramsDlg.DoModal() == IDOK)
 	{
 		s = paramsDlg.m_sParams;
+		param = s;
 	}
 }
 
@@ -334,17 +719,17 @@ BYTE CPODlg::GetPixel(int x, int y)
 	Color pixelColor;
 	m_pImgIN->GetPixel(x, y, &pixelColor);
 
-	double r = pixelColor.GetR();
-	double g = pixelColor.GetG();
-	double b = pixelColor.GetB();
-	double J = 0.299*r + 0.587*g + 0.114*b;
+	double red = pixelColor.GetR();
+	double green = pixelColor.GetG();
+	double blue = pixelColor.GetB();
+	double I = 0.299 * red + 0.587 * green + 0.114 * blue;
 
-	return (BYTE)J;
+	return (BYTE)I;
 }
 
-void CPODlg::SetPixel(int x, int y, BYTE J)
+void CPODlg::SetPixel(int x, int y, BYTE Js)
 {
-	Color pixelColor(J,J,J);
+	Color pixelColor(Js, Js, Js);
 	Status s = m_pImgOUT->SetPixel(x, y, pixelColor);
 }
 
@@ -357,11 +742,11 @@ int CPODlg::GetEncoderClsid(const WCHAR* format, CLSID* pClsid)
 
 	GetImageEncodersSize(&num, &size);
 	if (size == 0)
-		return -1;  // Failure
+		return -1;  // failure
 
 	pImageCodecInfo = (ImageCodecInfo*)(malloc(size));
 	if (pImageCodecInfo == NULL)
-		return -1;  // Failure
+		return -1;  // failure
 
 	GetImageEncoders(num, size, pImageCodecInfo);
 
@@ -371,10 +756,10 @@ int CPODlg::GetEncoderClsid(const WCHAR* format, CLSID* pClsid)
 		{
 			*pClsid = pImageCodecInfo[j].Clsid;
 			free(pImageCodecInfo);
-			return j;  // Success
+			return j;  // success
 		}
 	}
 
 	free(pImageCodecInfo);
-	return -1;  // Failure
+	return -1;  // failure
 }

@@ -12,14 +12,14 @@ using namespace Gdiplus;
 // CPODlg dialog
 class CPODlg : public CDialogEx
 {
-// Construction
+	// Construction
 public:
 	CPODlg(CWnd* pParent = NULL);	// standard constructor
 
 // Dialog Data
 	enum { IDD = IDD_PO1_DIALOG };
 
-	protected:
+protected:
 	virtual void DoDataExchange(CDataExchange* pDX);	// DDX/DDV support
 
 
@@ -35,6 +35,7 @@ protected:
 	int m_imgH;
 
 	CComboBox m_combo1;
+	CString param;
 
 	GdiplusStartupInput m_gdiplusStartupInput;
 	ULONG_PTR           m_gdiplusToken;
@@ -50,11 +51,13 @@ protected:
 	afx_msg HCURSOR OnQueryDragIcon();
 	DECLARE_MESSAGE_MAP()
 
+	void ApplyMask3(int mask[3][3]);
+
 public:
 	afx_msg void OnBnClickedButtonLoad();
 	afx_msg void OnBnClickedButtonProcess();
 	afx_msg void OnBnClickedButtonSave();
 	afx_msg void OnBnClickedButtonParams();
 	afx_msg void OnDestroy();
-	
+
 };
